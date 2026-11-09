@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Human 3D Studio — GLB</title>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;overflow:hidden;background:#111820;color:#eef2f5;font:14px system-ui, sans-serif}canvas{display:block}#panel{position:fixed;z-index:2;left:14px;top:14px;width:min(340px,calc(100vw - 28px));padding:15px;background:#101820eF;border:1px solid #52606b;border-radius:14px;box-shadow:0 10px 35px #0008}h1{font-size:17px;margin:0 0 7px}p{color:#bdc8d0;line-height:1.4;margin:7px 0 12px}.buttons{display:flex;flex-wrap:wrap;gap:8px}button,.filelabel{border:1px solid #60717f;border-radius:9px;background:#253544;color:white;padding:9px 11px;font-weight:600;cursor:pointer}button:hover,.filelabel:hover{background:#344b5e}input{display:none}#status{font-size:12px;color:#9fd4b2;margin-top:10px;overflow-wrap:anywhere}.hint{font-size:11px;color:#91a0aa;margin-top:8px}#drop{position:fixed;inset:0;display:none;place-items:center;background:#14202ddd;border:3px dashed #9fc7e4;z-index:5;font-size:22px;font-weight:700}
+</style>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script>
+</head>
+<body>
+<div id="panel"><h1>Human 3D Studio — GLB</h1><p>Personnage humain de démonstration en 3D. Charge un vrai modèle humain GLB pour obtenir un rendu photoréaliste ; le modèle de démonstration n'est pas un humain AAA.</p><div class="buttons"><label class="filelabel" for="glb">Importer un GLB</label><input id="glb" type="file" accept=".glb,.gltf,model/gltf-binary,model/gltf+json"><button id="export">Exporter le modèle démo en GLB</button><button id="reset">Recentrer la caméra</button></div><div id="status">Initialisation de la scène 3D…</div><div class="hint">Souris/doigt : tourner · Molette/pincement : zoomer · Glisser un fichier GLB dans la scène.</div></div>
+<div id="drop">Déposer le fichier GLB ici</div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+
+const status=document.querySelector('#status');
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x18212a); scene.fog=new THREE.Fog(0x18212a,8,20);
+const camera=new THREE.PerspectiveCamera(34,innerWidth/innerHeight,.1,100); camera.position.set(0,1.55,5.3);
+const renderer=new THREE.WebGLRenderer({antialias:true,alpha:false}); renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setSize(innerWidth,innerHeight); renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap; renderer.outputColorSpace=THREE.SRGBColorSpace; renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.15; document.body.appendChild(renderer.domElement);
+const controls=new OrbitControls(camera,renderer.domElement); controls.target.set(0,1.0,0); controls.enableDamping=true; controls.minDistance=1.2; controls.maxDistance=9; controls.maxPolarAngle=Math.PI*.88;
+scene.add(new THREE.HemisphereLight(0xdceaff,0x514338,1.8));
+function dir(color,intensity,pos){const l=new THREE.DirectionalLight(color,intensity);l.position.set(...pos);l.castShadow=true;l.shadow.mapSize.set(2048,2048);l.shadow.camera.left=-4;l.shadow.camera.right=4;l.shadow.camera.top=4;l.shadow.camera.bottom=-4;scene.add(l)}
+dir(0xffdfc2,3.1,[3,5,4]);dir(0x9bbcff,1.7,[-4,3,-3]);dir(0xffffff,.8,[0,4,-4]);
+const floor=new THREE.Mesh(new THREE.PlaneGeometry(40,40),new THREE.MeshStandardMaterial({color:0x303b43,roughness:.94}));floor.rotation.x=-Math.PI/2;floor.position.y=-.025;floor.receiveShadow=true;scene.add(floor);
+const grid=new THREE.GridHelper(20,40,0x53616b,0x394650);grid.position.y=-.02;scene.add(grid);
+let active=null, mixer=null, clock=new THREE.Clock();
+function material(color,roughness=.75,metalness=0){return new THREE.MeshStandardMaterial({color,roughness,metalness})}
+function ellipsoid(parent,name,pos,scale,mat,segments=40){const m=new THREE.Mesh(new THREE.SphereGeometry(1,segments,32),mat);m.name=name;m.position.set(...pos);m.scale.set(...scale);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m}
+function capsuleBetween(parent,name,a,b,r,mat){const A=new THREE.Vector3(...a),B=new THREE.Vector3(...b),d=new THREE.Vector3().subVectors(B,A);const m=new THREE.Mesh(new THREE.CapsuleGeometry(r,Math.max(.01,d.length()-2*r),8,20),mat);m.name=name;m.position.copy(A).add(B).multiplyScalar(.5);m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),d.normalize());m.castShadow=true;m.receiveShadow=true;parent.add(m);return m}
+function makeDemo(){const root=new THREE.Group();root.name='DemoHuman_NotPhotorealistic';
+ const skin=material(0xb8795c,.82),skinLight=material(0xc78b70,.78),hair=material(0x211914,.93),shirt=material(0x59636b,.96),pants=material(0x252b31,.94),shoe=material(0x171b20,.9),eyeWhite=material(0xe8e3dc,.28),iris=material(0x536b67,.24),pupil=material(0x090b0c,.15),mouth=material(0x713f39,.85);
+ // Legs and shoes
+ capsuleBetween(root,'left_leg',[ -.115,.16,0],[-.13,.91,0],.095,pants);capsuleBetween(root,'right_leg',[.115,.16,0],[.13,.91,0],.095,pants);
+ ellipsoid(root,'left_shoe',[-.13,.09,.055],[.105,.07,.19],shoe);ellipsoid(root,'right_shoe',[.13,.09,.055],[.105,.07,.19],shoe);
+ // Torso, pelvis, neck
+ ellipsoid(root,'pelvis',[0,.99,0],[.205,.22,.125],pants);ellipsoid(root,'torso',[0,1.34,0],[.29,.39,.16],shirt);ellipsoid(root,'shoulders',[0,1.58,0],[.34,.14,.16],shirt);capsuleBetween(root,'neck',[0,1.59,0],[0,1.76,0],.075,skin);
+ // Arms, elbows, hands
+ for(const s of [-1,1]){capsuleBetween(root,s<0?'left_upper_arm':'right_upper_arm',[s*.29,1.54,0],[s*.38,1.16,.015],.075,shirt);ellipsoid(root,s<0?'left_elbow':'right_elbow',[s*.38,1.16,.015],[.073,.075,.075],skin);capsuleBetween(root,s<0?'left_forearm':'right_forearm',[s*.38,1.15,.015],[s*.4,.83,.045],.057,skin);ellipsoid(root,s<0?'left_hand':'right_hand',[s*.4,.77,.055],[.065,.095,.035],skin);for(let f=0;f<4;f++){capsuleBetween(root,`finger_${s}_${f}`,[s*.4+(f-1.5)*.025,.76,.07],[s*.4+(f-1.5)*.03,.69,.075],.011,skin)} }
+ // Head shape and ears
+ ellipsoid(root,'head',[0,1.91,.005],[.145,.205,.135],skinLight,48);ellipsoid(root,'left_ear',[-.145,1.91,0],[.035,.065,.035],skin);ellipsoid(root,'right_ear',[.145,1.91,0],[.035,.065,.035],skin);
+ // Hair cap + locks
+ ellipsoid(root,'hair_cap',[0,2.045,-.012],[.15,.105,.14],hair,48);for(let i=0;i<11;i++){const x=(i-5)*.022;ellipsoid(root,'hair_lock_'+i,[x,2.075,.045],[.018,.075,.035],hair,20)}
+ // Face: eyes facing +Z, eye sockets, irises, pupils, brows
+ for(const s of [-1,1]){ellipsoid(root,'eye_socket_'+s,[s*.057,1.955,.119],[.044,.027,.018],skin);ellipsoid(root,'eye_white_'+s,[s*.057,1.955,.132],[.031,.016,.012],eyeWhite);ellipsoid(root,'iris_'+s,[s*.057,1.955,.143],[.012,.013,.006],iris,24);ellipsoid(root,'pupil_'+s,[s*.057,1.955,.148],[.0055,.008,.003],pupil,20);ellipsoid(root,'brow_'+s,[s*.057,1.987,.126],[.039,.009,.012],hair,24)}
+ ellipsoid(root,'nose_bridge',[0,1.925,.139],[.018,.052,.024],skinLight);ellipsoid(root,'nose_tip',[0,1.895,.157],[.025,.018,.022],skinLight);ellipsoid(root,'mouth',[0,1.845,.132],[.038,.009,.009],mouth);ellipsoid(root,'chin',[0,1.815,.105],[.047,.025,.027],skinLight);
+ // Neckline seam detail
+ const collar=ellipsoid(root,'shirt_collar',[0,1.63,.12],[.09,.035,.018],material(0x343d45,.95));
+ root.userData.isDemo=true;return root;
+}
+function fitObject(obj){const box=new THREE.Box3().setFromObject(obj);const size=box.getSize(new THREE.Vector3());const center=box.getCenter(new THREE.Vector3());if(!Number.isFinite(size.y)||size.y<=0)throw new Error('Le fichier ne contient pas de géométrie 3D valide.');const s=1.85/size.y;obj.scale.multiplyScalar(s);obj.position.set(-center.x*s,-box.min.y*s,-center.z*s);controls.target.set(0,.95,0);camera.position.set(0,1.5,5.3);controls.update()}
+function setActive(obj){if(active)scene.remove(active);active=obj;scene.add(active);fitObject(active)}
+setActive(makeDemo());status.textContent='Scène 3D prête — mannequin de démonstration affiché.';
+async function loadFile(file){try{status.textContent='Chargement de '+file.name+'…';const loader=new GLTFLoader();const url=URL.createObjectURL(file);loader.load(url,gltf=>{URL.revokeObjectURL(url);try{mixer=null;const obj=gltf.scene;obj.traverse(n=>{if(n.isMesh){n.castShadow=true;n.receiveShadow=true;for(const m of (Array.isArray(n.material)?n.material:[n.material])){if(m){m.needsUpdate=true;if('envMapIntensity'in m)m.envMapIntensity=1}}}});setActive(obj);if(gltf.animations?.length){mixer=new THREE.AnimationMixer(obj);mixer.clipAction(gltf.animations[0]).play()}status.textContent=`GLB chargé : ${file.name} — ${gltf.animations?.length||0} animation(s).`; }catch(e){status.textContent='Erreur de modèle : '+e.message}},undefined,e=>{URL.revokeObjectURL(url);status.textContent='Impossible de lire ce fichier GLB/GLTF : '+(e?.message||'format invalide')})}catch(e){status.textContent='Erreur : '+e.message}}
+document.querySelector('#glb').addEventListener('change',e=>{const f=e.target.files?.[0];if(f)loadFile(f)});
+document.querySelector('#reset').addEventListener('click',()=>{camera.position.set(0,1.55,5.3);controls.target.set(0,.95,0);controls.update()});
+document.querySelector('#export').addEventListener('click',()=>{if(!active){status.textContent='Aucun modèle à exporter.';return}const exporter=new GLTFExporter();exporter.parse(active,result=>{const blob=new Blob([result],{type:'model/gltf-binary'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='human-demo.glb';a.click();URL.revokeObjectURL(a.href);status.textContent='Export GLB terminé (modèle de démonstration).'},e=>{status.textContent='Erreur export : '+e.message},{binary:true,onlyVisible:true})});
+const drop=document.querySelector('#drop');window.addEventListener('dragover',e=>{e.preventDefault();drop.style.display='grid'});window.addEventListener('dragleave',e=>{if(e.relatedTarget===null)drop.style.display='none'});window.addEventListener('drop',e=>{e.preventDefault();drop.style.display='none';const f=e.dataTransfer.files?.[0];if(f)loadFile(f)});
+const tick=()=>{requestAnimationFrame(tick);const dt=clock.getDelta();if(mixer)mixer.update(dt);controls.update();renderer.render(scene,camera)};tick();
+window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+</script></body></html>
